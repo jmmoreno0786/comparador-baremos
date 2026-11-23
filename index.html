@@ -191,14 +191,15 @@ function tokSim(a,b){if(!a.length||!b.length)return 0;const B=new Set(b);let n=0
 function codeSim(a,b){a=a.toUpperCase();b=b.toUpperCase();let s=0;for(let i=0;i<Math.min(a.length,b.length);i++)if(a[i]===b[i])s++;return s/Math.max(a.length,b.length,1)}
 
 function build(list,hasOld){
-  const byCode=new Map(), byOld=new Map(), items=[];
+  const byCode=new Map(), byOld=new Map(), byAnt=new Map(), items=[];
   for(const r of list){
-    const it={code:r[0],desc:r[1],alc:r[2],old:hasOld?r[3]:""};
+    const it={code:r[0],desc:r[1],alc:r[2],old:hasOld?r[3]:"",ant:hasOld?(r[4]||""):""};
+    if(it.ant && !byAnt.has(it.ant)) byAnt.set(it.ant,it);
     it.g=grams(it.desc); it.t=tokens(it.desc); it.ga=grams(it.alc.slice(0,300)); it.k=key(it.desc);
     if(!byCode.has(it.code)){byCode.set(it.code,it);items.push(it)}
     if(it.old && !byOld.has(it.old)) byOld.set(it.old,it);
   }
-  return {byCode,byOld,items};
+  return {byCode,byOld,byAnt,items};
 }
 
 fetch("datos.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
@@ -283,7 +284,7 @@ function parse(text){
   return lines.map(l=>l.split("\t").map(c=>c.replace(/^"|"$/g,"").trim()));
 }
 const isCodeLike=v=>/^[A-Z0-9]{6}$/i.test(v.trim());
-function knownCode(v){v=v.trim().toUpperCase();return BAR.URBANA.byCode.has(v)||BAR.PROVINCIA.byCode.has(v)||BAR.URBANA.byOld.has(v)}
+function knownCode(v){v=v.trim().toUpperCase();return BAR.URBANA.byCode.has(v)||BAR.PROVINCIA.byCode.has(v)||BAR.URBANA.byOld.has(v)||BAR.URBANA.byAnt.has(v)}
 function detect(rows){
   const n=Math.max(0,...rows.map(r=>r.length)); let best=-1,bs=-1,bd=-1,bdl=-1;
   for(let c=0;c<n;c++){
@@ -329,8 +330,14 @@ function check(code,desc,zona){
   if(hit){res.ok=true;res.ref=hit;
     if(desc){const s=Math.max(jac(grams(desc),hit.g),tokSim(tokens(desc),hit.t));if(s<0.35&&key(desc)!==hit.k)res.descWarn=true}
     return res}
-  // código antiguo (baremo diciembre) en URBANA
-  if(zona==="URBANA"&&B.byOld.has(c)){const it=B.byOld.get(c);res.sugg=it;res.why="Código antiguo (baremo diciembre). Su código nuevo es este.";return res}
+  // Tabla de comparativas: código antiguo ↔ código del contrato nuevo
+  if(zona==="URBANA"){
+    if(B.byAnt.has(c)){res.sugg=B.byAnt.get(c);res.why="Código del contrato antiguo. Según la tabla de comparativas, su código en el contrato nuevo es este.";return res}
+    if(B.byOld.has(c)){res.sugg=B.byOld.get(c);res.why="Código antiguo (baremo diciembre). Su código nuevo es este.";return res}
+  }else{
+    const u=O.byCode.get(c)||O.byOld.get(c);
+    if(u&&u.ant&&B.byCode.has(u.ant)){res.sugg=B.byCode.get(u.ant);res.why="Código del contrato nuevo (URBANA). Según la tabla de comparativas, su equivalente antiguo, que es el que vale en PROVINCIA, es este.";return res}
+  }
   let searchDesc=desc, src="descripción pegada";
   const inOther=O.byCode.get(c)||(O.byOld&&O.byOld.get(c));
   if(!searchDesc&&inOther){searchDesc=inOther.desc;src="descripción del baremo "+(zona==="URBANA"?"PROVINCIA":"URBANA")}
