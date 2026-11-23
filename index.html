@@ -195,7 +195,7 @@ function codeSim(a,b){a=a.toUpperCase();b=b.toUpperCase();let s=0;for(let i=0;i<
 function build(list,hasOld){
   const byCode=new Map(), byOld=new Map(), byAnt=new Map(), items=[];
   for(const r of list){
-    const it={code:r[0],desc:r[1],alc:r[2],old:hasOld?r[3]:"",ant:hasOld?(r[4]||""):""};
+    const it={code:r[0],desc:r[1],alc:r[2],old:hasOld?r[3]:"",ant:hasOld?(r[4]||""):"",prov:hasOld?(r[5]||""):""};
     if(it.ant && !byAnt.has(it.ant)) byAnt.set(it.ant,it);
     it.g=grams(it.desc); it.t=tokens(it.desc); it.ga=grams(it.alc.slice(0,300)); it.k=key(it.desc);
     if(!byCode.has(it.code)){byCode.set(it.code,it);items.push(it)}
@@ -203,9 +203,21 @@ function build(list,hasOld){
   }
   return {byCode,byOld,byAnt,items};
 }
+/* Código que vale en PROVINCIA según la tabla de comparativas:
+   el de diciembre si es distinto del nuevo; si no, el antiguo. La tabla manda sobre el archivo PROVINCIA. */
+function linkTable(){
+  const P=BAR.PROVINCIA, PM=new Map(), RM=new Map();
+  for(const it of BAR.URBANA.items){
+    if(!it.prov)continue;
+    if(!PM.has(it.prov))PM.set(it.prov,it);
+    for(const c of [it.code,it.old,it.ant]) if(c&&c!==it.prov&&!RM.has(c))RM.set(c,it);
+    if(!P.byCode.has(it.prov))P.byCode.set(it.prov,{code:it.prov,desc:it.desc,alc:it.alc,old:"",ant:"",prov:"",fromTable:true,g:it.g,t:it.t,ga:it.ga,k:it.k});
+  }
+  P.provMap=PM; P.redirect=RM;
+}
 
 fetch("datos.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
-  DB=d; BAR.URBANA=build(d.urbana,true); BAR.PROVINCIA=build(d.provincia,false);
+  DB=d; BAR.URBANA=build(d.urbana,true); BAR.PROVINCIA=build(d.provincia,false); linkTable();
   ZON=d.zonas.map(z=>({cp:z[0],name:z[1],zona:z[2],k:key(z[1])}));
   const seen=new Set();
   for(const z of ZON){const v=z.name+"|"+z.cp;if(seen.has(v))continue;seen.add(v);OPTS.push({name:z.name,cp:z.cp,zona:z.zona,k:z.k,w:norm(z.name).split(/[^A-Z0-9]+/).filter(Boolean).slice(1).map(key)})}
@@ -335,6 +347,13 @@ function check(code,desc,zona){
   const B=BAR[zona], O=BAR[zona==="URBANA"?"PROVINCIA":"URBANA"]; const c=code.trim().toUpperCase();
   const res={ok:false,code:c,ref:null,sugg:null,why:"",alts:[],descWarn:false};
   if(!c){res.why="Fila sin código";return res}
+  if(zona==="PROVINCIA"&&!B.provMap.has(c)&&B.redirect.has(c)){
+    const u=B.redirect.get(c), inFile=B.byCode.get(c)&&!B.byCode.get(c).fromTable;
+    const which=u.old===u.prov?"el código de diciembre":"el código antiguo";
+    res.sugg=B.byCode.get(u.prov);
+    res.why=(inFile?"Está en el archivo del baremo PROVINCIA, pero según":"Según")+` la tabla de comparativas en PROVINCIA corresponde ${which} (contrato nuevo: ${u.code}).`;
+    return res;
+  }
   const hit=B.byCode.get(c);
   if(hit){res.ok=true;res.ref=hit;
     if(desc){const s=Math.max(jac(grams(desc),hit.g),tokSim(tokens(desc),hit.t));if(s<0.35&&key(desc)!==hit.k)res.descWarn=true}
@@ -343,9 +362,6 @@ function check(code,desc,zona){
   if(zona==="URBANA"){
     if(B.byAnt.has(c)){res.sugg=B.byAnt.get(c);res.why="Código del contrato antiguo. Según la tabla de comparativas, su código en el contrato nuevo es este.";return res}
     if(B.byOld.has(c)){res.sugg=B.byOld.get(c);res.why="Código antiguo (baremo diciembre). Su código nuevo es este.";return res}
-  }else{
-    const u=O.byCode.get(c)||O.byOld.get(c);
-    if(u&&u.ant&&B.byCode.has(u.ant)){res.sugg=B.byCode.get(u.ant);res.why="Código del contrato nuevo (URBANA). Según la tabla de comparativas, su equivalente antiguo, que es el que vale en PROVINCIA, es este.";return res}
   }
   let searchDesc=desc, src="descripción pegada";
   const inOther=O.byCode.get(c)||(O.byOld&&O.byOld.get(c));
@@ -423,7 +439,7 @@ function cellSugg(x){
       `<option value="${esc(x.orig)}"${x.orig===cur&&!opts.some(o=>o.code===cur)?" selected":""}>Dejar el inicial: ${esc(x.orig)}</option></select>`;
     return h+`<span class="sg-why">${esc(res.why)}${opts.length>1?` · ${opts.length} opciones`:""}</span>`;
   }
-  if(res.ok){return `<span class="ref${res.descWarn?" warn":""}">${res.descWarn?"⚠ La descripción pegada no se parece a la del baremo. ":""}Baremo: ${esc(res.ref.desc)}</span>`}
+  if(res.ok){return `<span class="ref${res.descWarn?" warn":""}">${res.descWarn?"⚠ La descripción pegada no se parece a la del baremo. ":""}${res.ref.fromTable?"No está en el archivo del baremo PROVINCIA, pero es el código que indica la tabla de comparativas. ":""}Baremo: ${esc(res.ref.desc)}</span>`}
   let h="";
   if(res.sugg)h+=`<span class="sg-code">${esc(res.sugg.code)}</span> ${esc(res.sugg.desc)}`;
   else h+=`<span class="hint">Sin propuesta</span>`;
