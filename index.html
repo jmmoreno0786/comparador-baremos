@@ -100,7 +100,10 @@ td.final.kept{color:var(--warn)}
 <body>
 <div class="wrap">
   <header>
-    <h1>Comparador de Baremos</h1>
+    <div class="row" style="justify-content:space-between">
+      <h1>Comparador de Baremos</h1>
+      <button type="button" class="btn ghost" id="btnClear" title="Deja en blanco la población, las filas y el resultado">+ Nuevo</button>
+    </div>
     <p>Elige la población y pega las filas copiadas de Excel. Cada partida se busca en el baremo de su zona: verde si está, rojo si no está, con la partida que correspondería según la descripción.</p>
     <p class="status" id="status">Cargando baremos…</p>
   </header>
@@ -136,7 +139,6 @@ td.final.kept{color:var(--warn)}
       <textarea id="paste" spellcheck="false"></textarea>
       <div class="row">
         <button type="button" class="btn" id="btnRun">Comparar</button>
-        <button type="button" class="btn ghost" id="btnClear">Vaciar</button>
         <span id="exTag" class="ex">datos de ejemplo</span>
       </div>
     </section>
@@ -307,7 +309,14 @@ $("paste").addEventListener("input",()=>{manual=false;isExample=false;$("exTag")
 $("colCode").onchange=$("colDesc").onchange=()=>{manual=true;run()};
 $("hdr").onchange=()=>run();
 $("btnRun").onclick=()=>run();
-$("btnClear").onclick=()=>{$("paste").value="";isExample=false;$("exTag").hidden=true;manual=false;run();$("paste").focus()};
+$("btnClear").onclick=()=>{
+  $("paste").value="";$("pob").value="";isExample=false;$("exTag").hidden=true;manual=false;
+  $("hdr").value="auto";choices.clear();acHide();
+  $("pobMsg").hidden=true;$("pobChoices").hidden=true;$("pobChoices").innerHTML="";
+  $("copyMsg").textContent="";$("copyFallback").hidden=true;$("copyFallback").value="";
+  force=null;$("fAuto").setAttribute("aria-pressed","true");$("fUrb").setAttribute("aria-pressed","false");$("fProv").setAttribute("aria-pressed","false");
+  setZona(null);run();$("pob").focus();
+};
 
 /* ---------- Comparación ---------- */
 function rank(B,desc,origCode){
