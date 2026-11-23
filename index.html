@@ -216,13 +216,16 @@ function linkTable(){
   P.provMap=PM; P.redirect=RM;
 }
 
-fetch("datos.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
+const DATA_VERSION="2026-11-23-3";
+fetch("datos.json?v="+DATA_VERSION,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
   DB=d; BAR.URBANA=build(d.urbana,true); BAR.PROVINCIA=build(d.provincia,false); linkTable();
   ZON=d.zonas.map(z=>({cp:z[0],name:z[1],zona:z[2],k:key(z[1])}));
   const seen=new Set();
   for(const z of ZON){const v=z.name+"|"+z.cp;if(seen.has(v))continue;seen.add(v);OPTS.push({name:z.name,cp:z.cp,zona:z.zona,k:z.k,w:norm(z.name).split(/[^A-Z0-9]+/).filter(Boolean).slice(1).map(key)})}
   OPTS.sort((a,b)=>a.name.localeCompare(b.name,"es")||a.cp.localeCompare(b.cp));
-  $("status").textContent=`Baremo URBANA: ${BAR.URBANA.items.length} partidas · Baremo PROVINCIA: ${BAR.PROVINCIA.items.length} partidas · ${ZON.length} códigos postales`;
+  const nTabla=BAR.PROVINCIA.provMap.size;
+  $("status").textContent=`Baremo URBANA: ${BAR.URBANA.items.length} partidas · Baremo PROVINCIA: ${BAR.PROVINCIA.items.length} partidas · ${ZON.length} códigos postales · Tabla de comparativas: ${nTabla} equivalencias PROVINCIA · Datos v${DATA_VERSION}`;
+  if(!nTabla)$("status").textContent+=" · ⚠ Faltan las equivalencias de la tabla: recarga la página con Ctrl+F5.";
   $("pob").value="Armilla (18100)"; $("paste").value=EXAMPLE;
   resolvePob(); run();
 }).catch(e=>{$("status").textContent="No se pudieron cargar los baremos ("+e.message+"). Recarga la página."});
